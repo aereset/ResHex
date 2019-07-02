@@ -130,9 +130,9 @@ void setPWM(uint8_t motor, int16_t pwm) {
 static int32_t CPR;
 static uint16_t sampleTime;
 static volatile uint32_t sample = 0;
-static float Kp = 0,Ki = 0,Kd = 0,sat = 255, death = 0;
+static float Kp = 0,Ki = 0,Kd = 0,sat = 255, death = 0, rateLimit = 255;
 static float error[6], lastError[6], sumError[6], refPos[6], speed[6];
-static int16_t action[6];
+static int16_t action[6], lastAction[6];
 ISR(TIMER3_COMPA_vect) {
     for (int i = 0; i < 6; i++) {
         // Compute error
@@ -147,6 +147,12 @@ ISR(TIMER3_COMPA_vect) {
         // If pwm is inside the death zone change it to zero
         if (abs(action[i]) < death) 
             action[i] = 0;
+
+        // Slew rate limiter
+        if(abs(action[i] - lastAction[i]) > rateLimit) {
+          Serial.println(action[i] - lastAction[i]);
+          action[i] = lastAction[i] + ((action[i] > lastAction[i]) ? rateLimit : -rateLimit);
+        }
       
         // Move the motor
         setPWM(i,action[i]);
@@ -154,6 +160,7 @@ ISR(TIMER3_COMPA_vect) {
         // Sum the error and save last error
         sumError[i] += error[i];
         lastError[i] = error[i];
+        lastAction[i] = action[i];
     }
     sample++;
 }
@@ -187,6 +194,9 @@ void setSat(uint8_t value) {
 }
 void setDeath(uint8_t value) {
     death = value;
+}
+void setRateLimit(uint8_t value) {
+    rateLimit = value;
 }
 
 void setupDriverino(uint16_t sampling_ms, int32_t cpr) {
