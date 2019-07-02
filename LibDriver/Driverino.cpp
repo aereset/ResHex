@@ -61,7 +61,6 @@ void setupEncoders() {
 }
 
 
-
 /* ################################################
  *                         PWM
  * ################################################ */
@@ -93,13 +92,16 @@ void setupPWM() {
 }
 
 void setPWM(uint8_t motor, int16_t pwm) {
+    // Select direction using sign of pwm
     if(pwm > 0) {
-        DDRA |= (1<<motor);
-        DDRC &= ~(1<<motor);
+        PORTA |= (1<<motor);
+        PORTC &= ~(1<<motor);
     } else {
-        DDRC |= (1<<motor);
-        DDRA &= ~(1<<motor);
+        PORTC |= (1<<motor);
+        PORTA &= ~(1<<motor);
     }
+
+    // Select motor
     switch(motor) {
         case 0:
             OCR4A = abs(pwm);
@@ -125,62 +127,75 @@ void setPWM(uint8_t motor, int16_t pwm) {
 /* ################################################
  *                      PID
  * ################################################ */
-static uint32_t CPR[6];
+static int32_t CPR;
 static uint16_t sampleTime;
 static volatile uint32_t sample = 0;
-static float Kp = 0,Ki = 0,Kd = 0,sat = 255;
+static float Kp = 0,Ki = 0,Kd = 0,sat = 255, death = 0;
 static float error[6], lastError[6], sumError[6], refPos[6], speed[6];
-static volatile int32_t pulseSamples[6][SAMPLES];
-ISR(TIMER3_OVF_vect) {
+static int16_t action[6];
+ISR(TIMER3_COMPA_vect) {
     for (int i = 0; i < 6; i++) {
-        // Ir almacenando de forma circular los datos en el array
-        pulseSamples[i][sample%(SAMPLES+1)] = pulses[i];
-        // Cálculo de la velocidad
-        speed[i] = (pulseSamples[i][sample%(SAMPLES+1)] - pulseSamples[i][(sample+1)%(SAMPLES+1)]) * 60000 / (sampleTime*SAMPLES) / CPR[i] ;
-
+        // Compute error
         error[i] = refPos[i] - pulses[i];
-        int16_t action= constrain(Kp*error[i]+Ki*sumError[i]+Kd*(error[i]-lastError[i]),-sat,sat);
-        setPWM(i,action);
+
+        // Compute PID action
+        action[i] = Kp*error[i]+Ki*sumError[i]+Kd*(error[i]-lastError[i]);
+
+        // Apply saturation
+        action[i] = constrain(action[i] ,-sat,sat);
+
+        // If pwm is inside the death zone change it to zero
+        if (abs(action[i]) < death) 
+            action[i] = 0;
+      
+        // Move the motor
+        setPWM(i,action[i]);
+
+        // Sum the error and save last error
         sumError[i] += error[i];
         lastError[i] = error[i];
     }
     sample++;
 }
-void setupPID(uint16_t sampling_ms, uint32_t cpr[]) {
-    // Configurar timer para calcular el pid
+void setupPID(uint16_t sampling_ms, int32_t cpr) {
+    // Configure timer to compute PID perodically
+    // Prescaler a 1024, CTC mode
     TCCR3A = 0;
-    TCCR3B = (1<<CS30) | (1<<CS31) | (1<<CS32) | (1<<WGM32);
+    TCCR3B = (1<<CS32) | (1<<WGM32);
     OCR3A = sampling_ms * 15.625;
-    TIMSK1 = (1<<TOIE3);
+    TIMSK3 = (1<<OCIE3A);
+
+    // Save sample time and pulses per revolution
     sampleTime = sampling_ms;
-    // Guardar pulsos por vuelta
-    memcpy(CPR,cpr,6*sizeof(uint32_t));
+    CPR = cpr;
 }
 void setRef(uint8_t motor, int32_t pos) {
-    refPos[motor] = pos;
-    sumError[motor] = 0;
+    // Save reference in degrees
+    refPos[motor] = pos*((float)CPR)/360.0;
 }
 void setKp(float value) {
     Kp = value;
 }
 void setKi(float value) {
-    Kp = value;
+    Ki = value;
 }
 void setKd(float value) {
-    Kp = value;
+    Kd = value;
 }
 void setSat(uint8_t value) {
     sat = value;
 }
+void setDeath(uint8_t value) {
+    death = value;
+}
 
-void setupDriverino(uint16_t sampling_ms, const uint32_t cpr[]) {
+void setupDriverino(uint16_t sampling_ms, int32_t cpr) {
+    // Call setup subroutines
     setupEncoders();
     setupPWM();
     setupPID(sampling_ms,cpr);
 }
 float getPos(uint8_t motor) {
-    return pulses[motor] / CPR[motor];
-}
-float getSpeed(uint8_t motor) {
-    return speed[motor];
+    // return position in degrees
+    return pulses[motor] / (float)CPR * 360.0;
 }
