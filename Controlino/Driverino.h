@@ -5,8 +5,8 @@
 #ifndef RESHEX_DRIVERINO_H
 #define RESHEX_DRIVERINO_H
 
-// Setup driverino. Give sampling time and counts per revolution
-void setupDriverino(uint16_t sampling_ms, int32_t cpr);
+// Setup driverino with I2C address
+void setupDriverino();
 
 // Set Derivative constant
 void setKd(float value);
@@ -27,4 +27,11 @@ void setRef(uint8_t motor, int32_t pos);
 
 // Return the angle recorded by the encoder in DEGREES
 float getPos(uint8_t motor);
+
+// Set sampling time
+void setSampling(uint16_t sampling_ms);
+
+// Set counts per revolution
+void setCPR(int32_t cpr);
+
 #endif //RESHEX_DRIVERINO_H

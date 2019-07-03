@@ -199,6 +199,14 @@ void setRateLimit(uint8_t value) {
     rateLimit = value;
 }
 
+void setSampling(uint16_t sampling_ms) {
+    OCR3A = sampling_ms * 15.625;
+    sampleTime = sampling_ms;
+}
+void setCPR(int32_t cpr) {
+    CPR = cpr;
+}
+
 void setupDriverino(uint16_t sampling_ms, int32_t cpr) {
     // Call setup subroutines
     setupEncoders();
