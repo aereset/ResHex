@@ -1,37 +1,33 @@
 //
 // Created by oscar on 13/06/19.
 //
+#include "Driverino.h"
 #include<stdint.h>
 #include<Arduino.h>
 #include <Wire.h>
 
 #define ADDRESS 8
 
-enum cmd_t {NONE, KP, KI, KD, SAT, DEATH, RATE, SETREF, GETPOS, CPR, SAMPLING};
-typedef union driverinoUnion {
-  struct driverinoStruct {
-    uint8_t motor;
-    enum cmd_t command;
-    float value;
-    float answer;
-  } data; 
-  uint8_t bin[11];
-} DriverinoMsg;
+#define DEBUG
 
 void requestMsg(DriverinoMsg * msg, uint8_t address) {
-  int i = 0;
-  
-  Wire.beginTransmission(address);
-  for ( i = 0; i < 7; i++) {
-      Wire.write(msg->bin[i]);
-  }
-  Wire.endTransmission();
-  
-  Wire.requestFrom(address, 4);    // request 4 bytes from slave device #8
-  while (Wire.available()) { // slave may send less than requested
-    msg->bin[i] = Wire.read(); // receive a byte as character
-    i++;
-  }
+    Wire.beginTransmission(8);
+    Wire.write(msg->bin,7);
+    Wire.endTransmission();
+    Wire.requestFrom(8,4);
+    for(int i = 7; i < 11; i++) {
+        msg->bin[i] = Wire.read();
+    }
+
+#ifdef DEBUG
+Serial.println("driverinoSrv:");
+Serial.print("\tmotor: "); Serial.println(msg->data.motor);
+Serial.print("\tcommand: "); Serial.println(msg->data.command);
+Serial.print("\tvalue: "); Serial.println(msg->data.value);
+Serial.println("\t-----------------");
+Serial.print("\tanswer: "); Serial.println(msg->data.answer);
+#endif
+
 }
 
 

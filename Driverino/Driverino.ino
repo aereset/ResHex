@@ -1,6 +1,7 @@
 #include "Driverino.h"
-
 #include <Wire.h>
+
+#define DEBUG
 #define DRIVERINO_ADDR 8
 #define SAMPLING_MS 10
 #define COUNTS 3600
@@ -19,28 +20,34 @@ typedef union driverinoUnion {
 DriverinoMsg msg;
 
 void setup() {
-  Serial.begin(9600);
-  Serial.setTimeout(10);
-  
   Wire.begin(DRIVERINO_ADDR);
   Wire.onReceive(receiveEvent);
   Wire.onRequest(requestEvent);
-  
+
+  Serial.begin(9600);
+  Serial.setTimeout(10);
+
   setupDriverino(SAMPLING_MS, COUNTS);
 }
 void receiveEvent(int howMany) {
-  int i = 0;
-  while (1 < Wire.available()) {
-    msg.bin[i] = Wire.read(); 
-    i++;
+  for (int i = 0; i < 7; i++) {
+    msg.bin[i] = Wire.read();
   }
   processMsg();
 }
 void requestEvent() {
-  for (int i = 7; i < 11; i++) {
-      Wire.write(msg.bin[i]);
-  }
+  Wire.write(&msg.bin[7],4);
+
+#ifdef DEBUG
+  Serial.println("driverinoSrv:");
+  Serial.print("\tmotor: "); Serial.println(msg.data.motor);
+  Serial.print("\tcommand: "); Serial.println(msg.data.command);
+  Serial.print("\tvalue: "); Serial.println(msg.data.value);
+  Serial.println("\t-----------------");
+  Serial.print("\tanswer: "); Serial.println(msg.data.answer);
+#endif
 }
+
 void processMsg() {
   switch (msg.data.command) {
     case NONE:
@@ -103,6 +110,14 @@ void processMsg() {
     setSampling(msg.data.value);
     break;
   }
+
+  Serial.println("driverinoSrv:");
+Serial.print("\tmotor: "); Serial.println(msg.data.motor);
+Serial.print("\tcommand: "); Serial.println(msg.data.command);
+Serial.print("\tvalue: "); Serial.println(msg.data.value);
+Serial.println("\t-----------------");
+Serial.print("\tanswer: "); Serial.println(msg.data.answer);
+
 }
 
 void loop() {

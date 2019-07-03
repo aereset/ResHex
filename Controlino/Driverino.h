@@ -4,7 +4,17 @@
 
 #ifndef RESHEX_DRIVERINO_H
 #define RESHEX_DRIVERINO_H
-
+#include <stdint.h>
+enum cmd_t {NONE, KP, KI, KD, SAT, DEATH, RATE, SETREF, GETPOS, CPR, SAMPLING};
+typedef union driverinoUnion {
+  struct driverinoStruct {
+    uint8_t motor;
+    enum cmd_t command;
+    float value;
+    float answer;
+  } data; 
+  uint8_t bin[11];
+} DriverinoMsg;
 // Setup driverino with I2C address
 void setupDriverino();
 
