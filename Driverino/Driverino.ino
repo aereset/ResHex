@@ -5,121 +5,140 @@
 #define DRIVERINO_ADDR 8
 #define SAMPLING_MS 10
 #define COUNTS 3600
+#define TERMINATOR 0x02
 
 enum cmd_t {NONE, KP, KI, KD, SAT, DEATH, RATE, SETREF, GETPOS, CPR, SAMPLING};
-typedef union driverinoUnion {
-  struct driverinoStruct {
+
+typedef union masterMessage {
+  struct masterStruct {
     uint8_t motor;
     enum cmd_t command;
     float value;
-    float answer;
-  } data; 
-  uint8_t bin[11];
-} DriverinoMsg;
+    uint16_t checksum;
+    uint8_t terminator;
+  } data;
+  uint8_t bin[10];
+} MasterMsg;
 
-DriverinoMsg msg;
+typedef union slaveMessage {
+  struct slaveStruct {
+    float answer;
+    uint16_t checksum;
+    uint8_t terminator;
+  } data;
+  uint8_t bin[7];
+} SlaveMsg;
+
+
+MasterMsg masterMsg;
+SlaveMsg slaveMsg;
 
 void setup() {
-  Wire.begin(DRIVERINO_ADDR);
-  Wire.onReceive(receiveEvent);
-  Wire.onRequest(requestEvent);
-
+  Serial2.begin(38400);
   Serial.begin(9600);
   Serial.setTimeout(10);
 
   setupDriverino(SAMPLING_MS, COUNTS);
 }
-void receiveEvent(int howMany) {
-  for (int i = 0; i < 7; i++) {
-    msg.bin[i] = Wire.read();
-  }
-  processMsg();
-}
-void requestEvent() {
-  Wire.write(&msg.bin[7],4);
 
-#ifdef DEBUG
-  Serial.println("driverinoSrv:");
-  Serial.print("\tmotor: "); Serial.println(msg.data.motor);
-  Serial.print("\tcommand: "); Serial.println(msg.data.command);
-  Serial.print("\tvalue: "); Serial.println(msg.data.value);
-  Serial.println("\t-----------------");
-  Serial.print("\tanswer: "); Serial.println(msg.data.answer);
-#endif
+void serialEvent2() {
+  Serial2.readBytesUntil(TERMINATOR, masterMsg.bin, 10);
+  if (masterMsg.data.checksum == ChecksumFletcher16(masterMsg.bin, 7)) {
+    processMsg();
+    slaveMsg.data.checksum = ChecksumFletcher16(slaveMsg.bin, 4);
+    slaveMsg.data.terminator = TERMINATOR;
+    Serial2.write(slaveMsg.bin, 7);
+
+    Serial.println("[SLAVE] driverinoSrv:");
+    Serial.print("\tmotor: "); Serial.println(masterMsg.data.motor);
+    Serial.print("\tcommand: "); Serial.println(masterMsg.data.command);
+    Serial.print("\tvalue: "); Serial.println(masterMsg.data.value);
+  } else {
+    Serial.println("ERROR");
+
+  }
 }
+
 
 void processMsg() {
-  switch (msg.data.command) {
+  switch (masterMsg.data.command) {
     case NONE:
-    msg.data.answer = NAN;
+    slaveMsg.data.answer = NAN;
     break;
     
     case KP:
-    msg.data.answer = 1;
-    setKp(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setKp(masterMsg.data.value);
     break;
 
     case KI:
-    msg.data.answer = 1;
-    setKi(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setKi(masterMsg.data.value);
     break;
 
     case KD:
-    msg.data.answer = 1;
-    setKd(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setKd(masterMsg.data.value);
     break;
 
     case SAT:
-    msg.data.answer = 1;
-    setSat(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setSat(masterMsg.data.value);
     break;
 
     case DEATH:
-    msg.data.answer = 1;
-    setDeath(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setDeath(masterMsg.data.value);
     break;
 
     case RATE:
-    msg.data.answer = 1;
-    setRateLimit(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setRateLimit(masterMsg.data.value);
     break;
 
     case SETREF:
-    if (msg.data.motor < 6) {
-      msg.data.answer = 1;
-      setRef(msg.data.motor,msg.data.value);
+    if (masterMsg.data.motor < 6) {
+      slaveMsg.data.answer = 1;
+      setRef(masterMsg.data.motor,masterMsg.data.value);
     } else
-      msg.data.answer = NAN;
+      slaveMsg.data.answer = NAN;
     break;
 
     case GETPOS:
-    if (msg.data.motor < 6) {
-      msg.data.answer = getPos(msg.data.motor);
-      setRef(msg.data.motor,msg.data.value);
+    if (masterMsg.data.motor < 6) {
+      slaveMsg.data.answer = getPos(masterMsg.data.motor);
+      setRef(masterMsg.data.motor,masterMsg.data.value);
     } else
-      msg.data.answer = NAN;
+      slaveMsg.data.answer = NAN;
     break;
 
     case CPR:
-    msg.data.answer = 1;
-    setCPR(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setCPR(masterMsg.data.value);
     break;
 
     case SAMPLING:
-    msg.data.answer = 1;
-    setSampling(msg.data.value);
+    slaveMsg.data.answer = 1;
+    setSampling(masterMsg.data.value);
     break;
   }
-
-  Serial.println("driverinoSrv:");
-Serial.print("\tmotor: "); Serial.println(msg.data.motor);
-Serial.print("\tcommand: "); Serial.println(msg.data.command);
-Serial.print("\tvalue: "); Serial.println(msg.data.value);
-Serial.println("\t-----------------");
-Serial.print("\tanswer: "); Serial.println(msg.data.answer);
 
 }
 
 void loop() {
     delay(10);
+    Serial.println(getPos(0));
+}
+
+
+uint16_t ChecksumFletcher16(byte *data, size_t count ) {
+  uint8_t sum1 = 0;
+  uint8_t sum2 = 0;
+
+  for (size_t index = 0; index < count; ++index )
+  {
+    sum1 = sum1 + (uint8_t)data[index];
+    sum2 = sum2 + sum1;
+  }
+  return (sum2 << 8) | sum1;
 }

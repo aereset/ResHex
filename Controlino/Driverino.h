@@ -5,16 +5,30 @@
 #ifndef RESHEX_DRIVERINO_H
 #define RESHEX_DRIVERINO_H
 #include <stdint.h>
+
 enum cmd_t {NONE, KP, KI, KD, SAT, DEATH, RATE, SETREF, GETPOS, CPR, SAMPLING};
-typedef union driverinoUnion {
-  struct driverinoStruct {
+
+typedef union masterMessage {
+  struct masterStruct {
     uint8_t motor;
     enum cmd_t command;
     float value;
+    uint16_t checksum;
+    uint8_t terminator;
+  } data;
+  uint8_t bin[10];
+} MasterMsg;
+
+typedef union slaveMessage {
+  struct slaveStruct {
     float answer;
-  } data; 
-  uint8_t bin[11];
-} DriverinoMsg;
+    uint16_t checksum;
+    uint8_t terminator;
+  } data;
+  uint8_t bin[7];
+} SlaveMsg;
+
+
 // Setup driverino with I2C address
 void setupDriverino();
 
