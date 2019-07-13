@@ -2,114 +2,93 @@
 // Created by oscar on 13/06/19.
 //
 #include "Driverino.h"
-#include<stdint.h>
-#include<Arduino.h>
-#include <SoftwareSerial.h>
+#include <stdint.h>
+#include <Arduino.h>
 #include <Console.h>
-#define TERMINATOR 0x02
 
-#define DEBUG
- SoftwareSerial softSerial(8, 9);
+#define SPI_SS 4
+float pos[6];
 
-uint16_t ChecksumFletcher16(byte *data, size_t count )
-{
-  uint8_t sum1 = 0;
-  uint8_t sum2 = 0;
+enum cmd_t {NONE, KP, KI, KD, SAT, DEATH, RATE, SETREF, GETPOS, CPR, SAMPLING};
 
-  for (size_t index = 0; index < count; ++index )
-  {
-    sum1 = sum1 + (uint8_t)data[index];
-    sum2 = sum2 + sum1;
-  }
-  return (sum2 << 8) | sum1;
-}
-void requestMsg(MasterMsg * masterMsg, SlaveMsg * slaveMsg) {
-  
-  masterMsg->data.motor = 0;
-  masterMsg->data.command = DEATH;
-  masterMsg->data.value = millis() / 1000.0;
-  masterMsg->data.checksum = ChecksumFletcher16(masterMsg->bin, 7);
-  masterMsg->data.terminator = TERMINATOR;
+struct msg_s {
+  enum cmd_t cmd;
+  uint8_t motor;
+  float value;
+};
 
-  softSerial.write(masterMsg->bin, 10);
-  delayMicroseconds(1000);
+typedef union msg_u {
+  uint8_t bin[sizeof(struct msg_s)];
+  struct msg_s data;
+} Msg;
+Msg slave, master;
 
-  softSerial.readBytesUntil(TERMINATOR, slaveMsg->bin, 7);
-  if (slaveMsg->data.checksum == ChecksumFletcher16(slaveMsg->bin, 4)) {
-    Console.println("[MASTER] driverinoSrv:");
-    Console.println(slaveMsg->data.answer);
-  } else {
-    Console.println("ERROR");
+void call() {
+  for (size_t i = 0; i < sizeof(struct msg_s); i++) {
+    digitalWrite(SPI_SS,LOW);
+    SPDR = master.bin[i];
+    while(!(SPSR & (1 << SPIF))){}
+    digitalWrite(SPI_SS,HIGH);
+    slave.bin[i] = SPDR;
+    asm volatile("nop");
   }
 
-
+  if (slave.data.motor < 6 && slave.data.value==slave.data.value)
+    pos[slave.data.motor] = slave.data.value;
 }
-
 
 void setRef(uint8_t motor, int32_t pos) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.motor = motor;
-    msg.data.command = SETREF;
-    msg.data.value = pos;
-    requestMsg(&msg,&slaveMsg);
+    master.data.motor = motor;
+    master.data.cmd = SETREF;
+    master.data.value = pos;
+    call();
 }
 void setKp(float value) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = KP;
-    msg.data.value = value;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = KP;
+    master.data.value = value;
+    call();
 }
 void setKi(float value) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = KI;
-    msg.data.value = value;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = KI;
+    master.data.value = value;
+    call();
 }
 void setKd(float value) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = KD;
-    msg.data.value = value;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = KD;
+    master.data.value = value;
+    call();
 }
 void setSat(uint8_t value) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = SAT;
-    msg.data.value = value;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = SAT;
+    master.data.value = value;
+    call();
 }
 void setDeath(uint8_t value) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = DEATH;
-    msg.data.value = value;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = DEATH;
+    master.data.value = value;
+    call();
 }
 void setRateLimit(uint8_t value) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = RATE;
-    msg.data.value = value;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = RATE;
+    master.data.value = value;
+    call();
 }
 
 void setSampling(uint16_t sampling_ms) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = SAMPLING;
-    msg.data.value = sampling_ms;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = SAMPLING;
+    master.data.value = sampling_ms;
+    call();
 }
 void setCPR(int32_t cpr) {
-    MasterMsg msg;
-    SlaveMsg slaveMsg;
-    msg.data.command = CPR;
-    msg.data.value = cpr;
-    requestMsg(&msg,&slaveMsg);
+    master.data.cmd = CPR;
+    master.data.value = cpr;
+    call();
+}
+float getPos(uint8_t motor) {
+    master.data.motor = motor;
+    master.data.cmd = GETPOS;
+    call();
+    return pos[motor];
 }
 
 void setupDriverino() {
@@ -117,14 +96,10 @@ void setupDriverino() {
   Bridge.begin();
   Console.begin();
 
-  softSerial.begin(38400);
-}
-float getPos(uint8_t motor) {
-    MasterMsg masterMsg;
-    SlaveMsg slaveMsg;
-    masterMsg.data.motor = motor;
-    masterMsg.data.command = GETPOS;
-    requestMsg(&masterMsg,&slaveMsg);
-    
-    return slaveMsg.data.answer;
+  pinMode(MOSI,OUTPUT);
+  pinMode(SCK,OUTPUT);
+  pinMode(SPI_SS,OUTPUT);
+
+  SPCR = (1<<SPE) | (1<<MSTR) | (1<<SPR0);
+
 }

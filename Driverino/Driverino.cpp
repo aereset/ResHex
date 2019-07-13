@@ -150,7 +150,6 @@ ISR(TIMER3_COMPA_vect) {
 
         // Slew rate limiter
         if(abs(action[i] - lastAction[i]) > rateLimit) {
-          Serial.println(action[i] - lastAction[i]);
           action[i] = lastAction[i] + ((action[i] > lastAction[i]) ? rateLimit : -rateLimit);
         }
       

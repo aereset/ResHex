@@ -1,5 +1,4 @@
 #include "Driverino.h"
-#include <SoftwareSerial.h>
 #include <Console.h>
 
 #define SAMPLING_MS 10
@@ -11,38 +10,32 @@
 #define Kp 0.2
 
 void setup() {
-  
+
   setupDriverino();
 
   delay(10);
 
-  setSampling(SAMPLING_MS);  delay(10);
-
-  setCPR(COUNTS); delay(10);
-  setSat(SATURATION); delay(10);
-  setDeath(Death); delay(10);
-  setRateLimit(SLEW_RATE); delay(10);
-  setKp(Kp);  delay(10);
-  setKi(Ki);  delay(10);
-
+  setRef(1, 1000); delay(10);
+  setRef(3, 1000); delay(10);
+  setRef(4, 1000); delay(10);
+  setRef(5, 1000); delay(10);
 
 }
 
- 
-int pos = 0;
 long int last = 0;
 void loop() {
   if (Console.available() > 0) {
-      int pos = Console.parseInt();
-      Console.println(pos);
-      setRef(0, pos);
+    int poss = Console.parseInt();
+    Console.println(poss);
+    setRef(0, poss);
   }
 
-  if (millis()- last > 1000) {
+  if (millis() - last > 1000) {
     last = millis();
-      getPos(0);
+    for (int i = 0; i < 6; i++) {
+      Console.print(getPos(i)); Console.print("\t");
+    }
+    Console.println();
   }
 
 }
- 
- 

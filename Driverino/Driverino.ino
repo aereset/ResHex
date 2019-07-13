@@ -1,144 +1,124 @@
 #include "Driverino.h"
-#include <Wire.h>
 
 #define DEBUG
 #define DRIVERINO_ADDR 8
 #define SAMPLING_MS 10
 #define COUNTS 3600
 #define TERMINATOR 0x02
+#define COUNTS 3600
+#define SATURATION 255
+#define SLEW_RATE 5
+#define Death 15
+#define Ki 0
+#define Kp 0.2
 
 enum cmd_t {NONE, KP, KI, KD, SAT, DEATH, RATE, SETREF, GETPOS, CPR, SAMPLING};
 
-typedef union masterMessage {
-  struct masterStruct {
-    uint8_t motor;
-    enum cmd_t command;
-    float value;
-    uint16_t checksum;
-    uint8_t terminator;
-  } data;
-  uint8_t bin[10];
-} MasterMsg;
+struct msg_s {
+  enum cmd_t cmd;
+  uint8_t motor;
+  float value;
+};
 
-typedef union slaveMessage {
-  struct slaveStruct {
-    float answer;
-    uint16_t checksum;
-    uint8_t terminator;
-  } data;
-  uint8_t bin[7];
-} SlaveMsg;
-
-
-MasterMsg masterMsg;
-SlaveMsg slaveMsg;
+typedef union msg_u {
+  uint8_t bin[sizeof(struct msg_s)];
+  struct msg_s data;
+} Msg;
+Msg slave, master;
 
 void setup() {
-  Serial2.begin(38400);
+  pinMode(MISO, OUTPUT);
+
+  SPCR = (1 << SPE) | (1 << SPIE);
+  sei();
+  
   Serial.begin(9600);
   Serial.setTimeout(10);
 
   setupDriverino(SAMPLING_MS, COUNTS);
+
+  setSat(SATURATION);
+  setDeath(Death); 
+  setRateLimit(SLEW_RATE); 
+  setKp(Kp); 
+  setKi(Ki); 
 }
 
-void serialEvent2() {
-  Serial2.readBytesUntil(TERMINATOR, masterMsg.bin, 10);
-  if (masterMsg.data.checksum == ChecksumFletcher16(masterMsg.bin, 7)) {
-    processMsg();
-    slaveMsg.data.checksum = ChecksumFletcher16(slaveMsg.bin, 4);
-    slaveMsg.data.terminator = TERMINATOR;
-    Serial2.write(slaveMsg.bin, 7);
+uint8_t i = 0;
+uint8_t j = 1;
 
-    Serial.println("[SLAVE] driverinoSrv:");
-    Serial.print("\tmotor: "); Serial.println(masterMsg.data.motor);
-    Serial.print("\tcommand: "); Serial.println(masterMsg.data.command);
-    Serial.print("\tvalue: "); Serial.println(masterMsg.data.value);
-  } else {
-    Serial.println("ERROR");
+ISR(SPI_STC_vect) {
+  master.bin[i] = SPDR;
+  asm volatile("nop");
 
-  }
+  SPDR = slave.bin[j];
+
+  if (i == sizeof(struct msg_s) - 1) i = 0;
+  else i++;
+  if (j == sizeof(struct msg_s) - 1) j = 0;
+  else j++;
 }
-
 
 void processMsg() {
-  switch (masterMsg.data.command) {
+  slave.data.cmd = master.data.cmd;
+  slave.data.motor = slave.data.motor;
+  
+  slave.data.value = getPos(slave.data.motor);
+
+  switch (master.data.cmd) {
     case NONE:
-    slaveMsg.data.answer = NAN;
     break;
     
     case KP:
-    slaveMsg.data.answer = 1;
-    setKp(masterMsg.data.value);
+    setKp(master.data.value);
     break;
 
     case KI:
-    slaveMsg.data.answer = 1;
-    setKi(masterMsg.data.value);
+    setKi(master.data.value);
     break;
 
     case KD:
-    slaveMsg.data.answer = 1;
-    setKd(masterMsg.data.value);
+    setKd(master.data.value);
     break;
 
     case SAT:
-    slaveMsg.data.answer = 1;
-    setSat(masterMsg.data.value);
+    setSat(master.data.value);
     break;
 
     case DEATH:
-    slaveMsg.data.answer = 1;
-    setDeath(masterMsg.data.value);
+    setDeath(master.data.value);
     break;
 
     case RATE:
-    slaveMsg.data.answer = 1;
-    setRateLimit(masterMsg.data.value);
+    setRateLimit(master.data.value);
     break;
 
     case SETREF:
-    if (masterMsg.data.motor < 6) {
-      slaveMsg.data.answer = 1;
-      setRef(masterMsg.data.motor,masterMsg.data.value);
+    if (master.data.motor < 6) {
+      setRef(master.data.motor,master.data.value);
     } else
-      slaveMsg.data.answer = NAN;
+      slave.data.value = NAN;
     break;
 
     case GETPOS:
-    if (masterMsg.data.motor < 6) {
-      slaveMsg.data.answer = getPos(masterMsg.data.motor);
-      setRef(masterMsg.data.motor,masterMsg.data.value);
-    } else
-      slaveMsg.data.answer = NAN;
+    if (master.data.motor >= 6)
+      slave.data.value = NAN;
     break;
 
     case CPR:
-    slaveMsg.data.answer = 1;
-    setCPR(masterMsg.data.value);
+    setCPR(master.data.value);
     break;
 
     case SAMPLING:
-    slaveMsg.data.answer = 1;
-    setSampling(masterMsg.data.value);
+    setSampling(master.data.value);
     break;
+
+    default:
+    slave.data.value = NAN;
   }
 
 }
 
 void loop() {
-    delay(10);
-    Serial.println(getPos(0));
-}
-
-
-uint16_t ChecksumFletcher16(byte *data, size_t count ) {
-  uint8_t sum1 = 0;
-  uint8_t sum2 = 0;
-
-  for (size_t index = 0; index < count; ++index )
-  {
-    sum1 = sum1 + (uint8_t)data[index];
-    sum2 = sum2 + sum1;
-  }
-  return (sum2 << 8) | sum1;
+    delay(500);
 }
