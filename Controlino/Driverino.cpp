@@ -33,8 +33,16 @@ void call() {
     asm volatile("nop");
   }
 
-  if (slave.data.motor < 6 && slave.data.value==slave.data.value)
+  if (slave.data.motor < 6)
     pos[slave.data.motor] = slave.data.value;
+
+//Serial.println("[MASTER]");
+// Serial.println(slave.data.motor);
+// Serial.println(slave.data.cmd);
+//
+// Serial.println(slave.data.value);
+ delayMicroseconds(500);
+
 }
 
 void setRef(uint8_t motor, int32_t pos) {

@@ -10,15 +10,19 @@
 #define Kp 0.2
 
 void setup() {
+  Serial.begin(1000000);
 
   setupDriverino();
 
-  delay(10);
-
-  setRef(1, 1000); delay(10);
-  setRef(3, 1000); delay(10);
-  setRef(4, 1000); delay(10);
-  setRef(5, 1000); delay(10);
+  delay(1000);
+  
+  setRef(0, 0);   
+  setRef(1, 0);  
+  setRef(2, 0); 
+  setRef(3, 0);  
+  setRef(4, 0);
+  setRef(5, 0); 
+  
 
 }
 
@@ -33,9 +37,9 @@ void loop() {
   if (millis() - last > 1000) {
     last = millis();
     for (int i = 0; i < 6; i++) {
-      Console.print(getPos(i)); Console.print("\t");
+      Serial.print(getPos(i)); Serial.print("\t"); delay(10);
     }
-    Console.println();
+    Serial.println();
   }
 
 }
